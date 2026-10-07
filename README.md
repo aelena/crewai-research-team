@@ -93,16 +93,17 @@ rules:
   max_exclamations: 0
 ```
 
-`voices/my-own-voice.yaml` is seeded from a published LinkedIn post, and that post passes its own profile clean (`research-team lint references/sample-text.md`). Quotes, blockquotes, URLs and
-the sources section are excluded from linting: a quoted CEO may say "game-changing", you may not. In Claude Code, `/voice` (in `.claude/commands/`) creates, analyses and switches profiles.
+`voices/my-own-voice.yaml` is seeded from a published LinkedIn post of my own (refer to the section below to replace it with your own voice instructions file), and that post passes its own profile clean (`research-team lint references/sample-text.md`). Quotes, blockquotes, URLs and
+the sources section are excluded from linting: for example, some high faluting CEO may want to say _game-changing_, but I won't :) . 
+
+In Claude Code, `/voice` (in `.claude/commands/`) creates, analyses and switches profiles.
 
 ### Making the voice your own
 
-The repo ships with my voice. If you cloned it, replace it with yours:
+The repo is opinionated with my own voice and style and that is what it ships. But if you cloned it, to make the tool speak your own voice you just need to do the following:
 
-1. Put one or more pieces you have written and are happy with in `references/`, for example
-   `references/sample-text.md`. Your best published post or essay is ideal; 300 words or more gives the
-   writers enough to match. The folder is gitignored, so `sample-text.md` is not in a fresh clone:
+1. Put one or more pieces that you have written that best reflect your style and tone inside the `references/` folder, for example
+   `references/sample-text.md`. Your best published post or essay is ideal; 300 words or more gives the  writers enough to match. The folder is gitignored, so `sample-text.md` is not in a fresh clone:
    `voices/my-own-voice.yaml` still loads without it, the writers just get no style examples.
 2. Edit `voices/my-own-voice.yaml`: tone, audience, the words you use and the ones you never would,
    how you open and close a piece, and the `rules` you want enforced. Or, in Claude Code, run
@@ -123,38 +124,59 @@ a minimum number of distinct sources.
 
 ```bash
 python -m venv .venv && .venv/Scripts/pip install -e ".[dev]"   # bin/ on macOS/Linux
-cp .env.example .env                                             # add an LLM key and a search key
+```
+```bash
+cp .env.example .env  # add an LLM key and a search key of your own in .env
+```
 
+```bash
 research-team doctor                    # models per agent, which keys are present, search provider
+```
+
+__How to tell it to write on a topic__
+
+you can `--dry-run` it first:
+
+```bash
 research-team run "Agentic AI in the aviation industry" --dry-run   # whole pipeline offline, free
+```
+
+or go for just the plan
+
+```bash
 research-team plan "Enterprise Architecture and Agentic AI adoption"   # cheap: just the plan
+```
+
+and then go for real, indicating what platform you are actually generating the piece for:
+
+```bash
 research-team run "Enterprise Architecture and Agentic AI adoption" \
   --angle "Why EA is the control plane agentic AI is missing" --platform linkedin-article
+```
+
+```bash
 research-team runs
 research-team lint runs/<run_id>/article.md --platform linkedin-article
 ```
 
-A run writes `runs/<run_id>/`: `01-plan_research.json` ... `12-revise_article.md`, `report.md`,
-`article.md` (with front matter), `charts/`, `sources.json`, `lint.json` and `status.json` (state,
-models, timings, token usage, guardrail overrides).
+A run writes `runs/<run_id>/`: `01-plan_research.json` ... `12-revise_article.md`, `report.md`, `article.md` (with front matter), `charts/`, `sources.json`, `lint.json` and `status.json` (state, models, timings, token usage, guardrail overrides).
+
+---
 
 ### Models
 
-Each agent is `fast` (tool-heavy: researchers, fact checkers) or `strong` (planner, analyst,
-writers, board). Defaults: `RESEARCH_LLM_FAST=anthropic/claude-sonnet-5-5`,
-`RESEARCH_LLM_STRONG=anthropic/claude-opus-5-5`. Any CrewAI/LiteLLM model string works, and any
-single agent can be overridden: `RESEARCH_LLM_COLUMNIST=...`.
+Each agent is `fast` (tool-heavy: researchers, fact checkers) or `strong` (planner, analyst, writers, board). Defaults: `RESEARCH_LLM_FAST=anthropic/claude-sonnet-5-5`, `RESEARCH_LLM_STRONG=anthropic/claude-opus-5-5`. Any CrewAI/LiteLLM model string works, and any single agent can be overridden: `RESEARCH_LLM_COLUMNIST=...`.
 
 ### Search
 
-`RESEARCH_SEARCH_PROVIDER=auto` picks the first of Exa, Serper, Tavily, Brave with a key present.
-With none, the crew runs from model knowledge, citations cannot be checked, and the article is
-marked `sourced: false`. Do not publish from that.
+`RESEARCH_SEARCH_PROVIDER=auto` picks the first of Exa, Serper, Tavily, Brave with a key present in your .env file. With none, the crew runs from model knowledge, citations cannot be checked, and the article is marked as `sourced: false`, so that while functional, the output will not be the best possible and you would be missing a lot of what this Crew can provide, so my recommendation is to not publish from that.
+
+---
 
 ## MCP server
 
 ```bash
-research-team mcp                                    # stdio (Claude Code / Desktop)
+research-team mcp           # stdio (Claude Code / Desktop)
 research-team mcp --transport streamable-http --port 8765
 ```
 
