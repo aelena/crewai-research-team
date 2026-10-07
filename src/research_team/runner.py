@@ -68,10 +68,31 @@ def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
+def _retry_on_lock(fn, attempts: int = 50, delay: float = 0.02):
+    """Windows refuses to replace (or open) a file another thread has open at that instant, which is
+    routine here: the crew writes status.json while MCP and A2A clients poll it. Retry briefly."""
+    for i in range(attempts):
+        try:
+            return fn()
+        except PermissionError:
+            if i == attempts - 1:
+                raise
+            time.sleep(delay)
+
+
+def atomic_write_text(path: Path, text: str) -> None:
+    """Write via a temp file and rename, so readers never see half a file."""
+    tmp = path.with_suffix(path.suffix + f".{threading.get_ident()}.tmp")
+    tmp.write_text(text, encoding="utf-8")
+    _retry_on_lock(lambda: tmp.replace(path))
+
+
+def read_text(path: Path) -> str:
+    return _retry_on_lock(lambda: path.read_text(encoding="utf-8"))
+
+
 def _write_json(path: Path, data: Any) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
-    tmp.replace(path)
+    atomic_write_text(path, json.dumps(data, indent=2, ensure_ascii=False, default=str))
 
 
 class RunState:
@@ -86,7 +107,7 @@ class RunState:
         return self.run_dir / STATUS_FILE
 
     def read(self) -> dict[str, Any]:
-        return json.loads(self.path.read_text(encoding="utf-8")) if self.path.is_file() else {}
+        return json.loads(read_text(self.path)) if self.path.is_file() else {}
 
     def update(self, **fields: Any) -> dict[str, Any]:
         with self._lock:

@@ -13,7 +13,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
-from .runner import ARTIFACTS, ResearchRequest, RunState, execute, new_run_id
+from .runner import ARTIFACTS, ResearchRequest, RunState, execute, new_run_id, read_text
 from .settings import Settings
 
 Runner = Callable[[ResearchRequest, Settings, Path, RunState], dict[str, Any]]
@@ -65,13 +65,13 @@ class JobManager:
         path = self._dir(run_id) / ARTIFACTS[name]
         if not path.is_file():
             raise FileNotFoundError(f"run '{run_id}' has no '{name}' yet")
-        return path.read_text(encoding="utf-8")
+        return read_text(path)
 
     def list_runs(self, limit: int = 20) -> list[dict[str, Any]]:
         if not self.runs_dir.is_dir():
             return []
         out = []
-        for d in sorted((p for p in self.runs_dir.iterdir() if p.is_dir()), reverse=True)[:limit]:
+        for d in sorted((p for p in self.runs_dir.iterdir() if p.is_dir() and not p.name.startswith(".")), reverse=True)[:limit]:
             data = RunState(d).read()
             out.append({
                 "run_id": d.name, "status": data.get("status", "unknown"), "stage": data.get("stage"),
