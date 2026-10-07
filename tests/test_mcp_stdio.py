@@ -7,7 +7,7 @@ import asyncio
 import json
 import os
 import shutil
-import sys
+import sysconfig
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,7 +17,8 @@ async def test_stdio_server_runs_a_dry_run_job(home):
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
 
-    exe = shutil.which("research-team", path=str(Path(sys.executable).parent))
+    # The scripts dir is not always next to python.exe (it is in a venv, not on a GitHub Windows runner).
+    exe = shutil.which("research-team", path=sysconfig.get_path("scripts"))
     assert exe, "research-team console script not installed"
     env = {**os.environ, "RESEARCH_HOME": str(home), "RESEARCH_VERBOSE": "true", "RESEARCH_SEARCH_PROVIDER": "none"}
     params = StdioServerParameters(command=exe, args=["mcp"], env=env, cwd=str(home))
