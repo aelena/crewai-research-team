@@ -60,7 +60,7 @@ async def test_mcp_tools(settings, jobs):
         assert rules == {"no-contractions", "avoid-vocabulary", "no-em-dashes"}
 
         voices = json.loads((await client.call_tool("list_voices", {})).content[0].text)
-        assert any(v["active"] and v["name"] == "antonio-elena" for v in voices)
+        assert any(v["active"] and v["name"] == "my-own-voice" for v in voices)
 
         bad = await client.call_tool("start_research", {"topic": "Agentic AI", "voice": "nobody"})
         assert bad.isError

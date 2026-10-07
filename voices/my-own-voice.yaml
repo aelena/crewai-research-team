@@ -1,4 +1,4 @@
-# Seeded on 2026-10-07 from the FlowTrack LinkedIn post (references/flowtrack-li-post.md).
+# Seeded on 2026-10-07 from a published LinkedIn post (references/sample-text.md).
 # Refine with /voice analyze <file> once more published pieces exist.
 
 name: "Antonio Elena"
@@ -78,4 +78,4 @@ rules:
   max_exclamations: 0
 
 examples:
-  - references/flowtrack-li-post.md
+  - references/sample-text.md

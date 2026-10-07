@@ -1,23 +1,61 @@
-# research-team
+# About
 
-A CrewAI research team that plans, researches in parallel, verifies every load-bearing claim against
-sources a tool actually returned, and writes a publishable piece in a declared voice. It runs from a
-CLI and is exposed as an MCP server, with an A2A adapter designed and next in line.
+This repo is a fully operational CrewAI research team that plans, performs parallel research, verifies every load-bearing claim against
+sources a tool actually returned, and writes a publishable piece in the style of a defined voice and style, in this case mine, but you could clone and replace that to make it your own. 
 
-It started as the deep-research lab crew (planner, researcher, fact checker, report writer, with
-main and secondary topics researched in parallel). This version keeps that skeleton and adds what a
-piece needs before it carries your name: a contrarian research track, a source audit, structured
-claim ledgers, a synthesis step, citation checks against a recorded source registry, and a writing
-room (draft, editorial board, revision) that is held to a voice profile and a platform's rules.
+It runs from a CLI and is exposed as an MCP server, with an A2A adapter designed and next in line.
+
+It started as a deep-research lab or demo crew (planner, researcher, fact checker, report writer, with main and secondary topics researched in parallel). This version keeps that skeleton and adds what a serious piece worthy of actual publication needs before it carries your name: 
+
+- a contrarian research track, that tries to go against the main thesis of the piece
+- a source audit
+- structured claim ledgers, which means that for each research track, a typed list (a `ClaimLedger` model, not free text) of every load-bearing claim with its status (verified, contested, unverified, refuted), a confidence level, the source URLs behind the verdict and the date the figure refers to, plus chartable numbers and open gaps. Later steps can only build the argument on claims marked verified.
+- a synthesis step
+- citation checks against a recorded source registry
+- and a writing room (draft, editorial board, revision) that is held to a voice profile and a platform's rules. Sort of final editorial review before the final piece is considered ready for publication.
+
+---
 
 ## The pipeline
 
+```mermaid
+flowchart LR
+    plan[plan_research]
+
+    subgraph research [Parallel research]
+        rm[research_main_topics]
+        rs[research_secondary_topics]
+        rc[research_counter_evidence]
+    end
+
+    audit["audit_sources<br/>(sync barrier)"]
+
+    subgraph verify [Parallel verification]
+        vm[verify_main_claims]
+        vs[verify_secondary_claims]
+    end
+
+    synth[synthesize_findings]
+    report[write_report]
+
+    subgraph room [Writing room]
+        draft[draft_article] --> review[review_article] --> revise[revise_article]
+    end
+
+    plan --> rm & rs & rc
+    rm & rs & rc --> audit
+    audit --> vm & vs
+    rc -.-> vm
+    vm & vs --> synth
+    rc -.-> synth
+    synth --> report --> draft
 ```
-plan ─┬─ research_main ────────┐                ┌─ verify_main ──────┐
-      ├─ research_secondary ───┼─ audit_sources ┤                    ├─ synthesize ─ write_report
-      └─ research_counter ─────┘   (barrier)    └─ verify_secondary ─┘        │
-                                                                              draft ─ review ─ revise
-```
+
+Dotted lines: the counter-evidence track also feeds main-claim verification and the synthesis directly.
+
+--- 
+
+## Tasks and Agents
 
 | # | Task | Agent | Output | Checked by |
 |---|---|---|---|---|
@@ -35,26 +73,17 @@ Stages run a prefix of this: `plan` (1), `report` (1-9), `article` (1-12).
 
 ### What makes it trustworthy enough to publish from
 
-- **Recorded sources.** The search and scrape tools are wrapped; every URL they return goes into a
-  per-run `SourceRegistry`. The ledgers, report and article are rejected if they cite a URL no tool
-  ever returned, which is the cheapest reliable defence against invented references.
-- **A contrarian track by design.** Counter-evidence is researched in parallel, not left to a
-  reviewer's goodwill, and it feeds verification and synthesis.
-- **Claims have states.** Verified, contested, unverified, refuted. Only verified claims may carry
-  the argument; the rest appear as what they are.
-- **Guardrails that do not kill the run.** CrewAI raises when a guardrail runs out of retries, which
-  would discard twenty minutes of research at the final step. Guards here let the last attempt
-  through and flag it (`guardrail_overrides` in `status.json`, `status: needs-attention` in the
+- **Recorded sources.** The search and scrape tools are wrapped; every URL they return goes into a per-run `SourceRegistry`. The ledgers, report and article are rejected if they cite a URL no tool ever returned, which is the cheapest reliable defence against invented references.
+- **A contrarian track by design.** Counter-evidence is researched in parallel, not left to a reviewer's goodwill, and it feeds verification and synthesis.
+- **Claims have states.** Verified, contested, unverified, refuted. Only verified claims may carry the argument; the rest appear as what they are.
+- **Guardrails that do not kill the run.** CrewAI raises when a guardrail runs out of retries, which would discard twenty minutes of research at the final step. Guards here let the last attempt through and flag it (`guardrail_overrides` in `status.json`, `status: needs-attention` in the
   article front matter). `RESEARCH_STRICT_GUARDRAILS=true` restores fail-hard.
 - **Everything on disk as it happens.** Each task's output is written the moment it completes.
 
 ## Voice profiles
 
-`voices/*.yaml` uses the schema of the `/voice` Claude Code command (name, tone, perspective,
-audience, vocabulary, sentence style, hooks, paragraph style, examples) plus `structure` and `rules`.
-The profile is rendered into the Columnist's and the Editorial Board's prompts, its `examples` are
-read in for rhythm and register, and its `rules` are enforced by a linter that the writing
-guardrails call:
+`voices/*.yaml` uses the schema of the `/voice` Claude Code command (name, tone, perspective, audience, vocabulary, sentence style, hooks, paragraph style, examples) plus `structure` and `rules`.
+The profile is rendered into the Columnist's and the Editorial Board's prompts, its `examples` are read in for rhythm and register, and its `rules` are enforced by a linter that the writing guardrails call:
 
 ```yaml
 rules:
@@ -64,11 +93,25 @@ rules:
   max_exclamations: 0
 ```
 
-`voices/antonio-elena.yaml` is seeded from a published LinkedIn post, and that post passes its own
-profile clean (`research-team lint references/flowtrack-li-post.md`). Quotes, blockquotes, URLs and
-the sources section are excluded from linting: a quoted CEO may say "game-changing", you may not.
+`voices/my-own-voice.yaml` is seeded from a published LinkedIn post, and that post passes its own profile clean (`research-team lint references/sample-text.md`). Quotes, blockquotes, URLs and
+the sources section are excluded from linting: a quoted CEO may say "game-changing", you may not. In Claude Code, `/voice` (in `.claude/commands/`) creates, analyses and switches profiles.
 
-In Claude Code, `/voice` (in `.claude/commands/`) creates, analyses and switches profiles.
+### Making the voice your own
+
+The repo ships with my voice. If you cloned it, replace it with yours:
+
+1. Put one or more pieces you have written and are happy with in `references/`, for example
+   `references/sample-text.md`. Your best published post or essay is ideal; 300 words or more gives the
+   writers enough to match. The folder is gitignored, so `sample-text.md` is not in a fresh clone:
+   `voices/my-own-voice.yaml` still loads without it, the writers just get no style examples.
+2. Edit `voices/my-own-voice.yaml`: tone, audience, the words you use and the ones you never would,
+   how you open and close a piece, and the `rules` you want enforced. Or, in Claude Code, run
+   `/voice analyze references/sample-text.md` and let it propose the values from your text.
+3. Keep `examples:` in the profile pointing at your files in `references/`.
+4. Check the profile against your own writing: `research-team lint references/sample-text.md`. It must
+   come back clean. If it does not, the rules are wrong, not your writing: loosen them.
+5. Optional: keep several profiles side by side (`voices/<name>.yaml`) and pick one with
+   `research-team voice switch <name>` or `--voice <name>` on a run.
 
 ## Platforms
 
