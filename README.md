@@ -136,7 +136,7 @@ Activate the virtual environment, so the `research-team` command is on your path
 .venv\Scripts\Activate.ps1          # Windows PowerShell
 ```
 ```bat
-.venv\Scripts\activate.bat          :: Windows cmd
+.venv\Scripts\activate.bat          # Windows cmd
 ```
 ```bash
 source .venv/Scripts/activate       # Git Bash on Windows
@@ -150,17 +150,43 @@ you can always call the command by its path: `.venv\Scripts\research-team doctor
 ```bash
 cp .env.example .env  # add an LLM key and a search key of your own in .env
 ```
+Inspect your configuration
 
 ```bash
 research-team doctor                    # models per agent, which keys are present, search provider
 ```
 
+produces something like the below depending on the values on your `.env` (API Keys are for you to provide):
+
+```text
+┏━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ agent                 ┃ tier   ┃ model                       ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ research_planner      │ strong │ anthropic/claude-opus-5-5   │
+│ topic_researcher      │ fast   │ anthropic/claude-sonnet-5-5 │
+│ contrarian_researcher │ fast   │ anthropic/claude-sonnet-5-5 │
+│ fact_checker          │ fast   │ anthropic/claude-sonnet-5-5 │
+│ research_analyst      │ strong │ anthropic/claude-opus-5-5   │
+│ report_writer         │ strong │ anthropic/claude-opus-5-5   │
+│ columnist             │ strong │ anthropic/claude-opus-5-5   │
+│ editorial_board       │ strong │ anthropic/claude-opus-5-5   │
+└───────────────────────┴────────┴─────────────────────────────┘
+
+keys: ANTHROPIC_API_KEY=set  OPENAI_API_KEY=set  GEMINI_API_KEY=-  EXA_API_KEY=-  SERPER_API_KEY=-  TAVILY_API_KEY=-
+BRAVE_API_KEY=set
+search: brave   home: <DIR>   memory: False   knowledge: False
+
+
+```
+
+<br/>
+
 __How to tell it to write on a topic__
 
-you can `--dry-run` it first:
+you can `--dry-run` it first, which mock-runs the entire pipeline at no cost
 
 ```bash
-research-team run "Agentic AI in the aviation industry" --dry-run   # whole pipeline offline, free
+research-team run "Agentic AI in the aviation industry" --dry-run
 ```
 
 or go for just the plan
