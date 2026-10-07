@@ -1,5 +1,9 @@
 # About
 
+<!-- badges-start -->
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat&logo=python&logoColor=white)](pyproject.toml) [![CrewAI](https://img.shields.io/badge/CrewAI-%3E%3D1.15-ff5a50?style=flat)](https://docs.crewai.com) [![MCP](https://img.shields.io/badge/MCP-server-6f42c1?style=flat)](#mcp-server) [![A2A](https://img.shields.io/badge/A2A-planned-lightgrey?style=flat)](docs/a2a.md) [![Tests](https://img.shields.io/badge/tests-pytest-0a9edc?style=flat&logo=pytest&logoColor=white)](tests) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat)](https://github.com/astral-sh/ruff) [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat)](LICENSE)
+<!-- badges-end -->
+
 This repo is a fully operational CrewAI research team that plans, performs parallel research, verifies every load-bearing claim against
 sources a tool actually returned, and writes a publishable piece in the style of a defined voice and style, in this case mine, but you could clone and replace that to make it your own. 
 
@@ -147,7 +151,9 @@ or go for just the plan
 research-team plan "Enterprise Architecture and Agentic AI adoption"   # cheap: just the plan
 ```
 
-and then go for real, indicating what platform you are actually generating the piece for:
+and then go for real, indicating what platform you are actually generating the piece for. `--platform`
+takes one of `linkedin-article` (the default), `linkedin-post`, `blog-essay` or `substack`
+(`research-team platforms` lists them with their word ranges; see [Platforms](#platforms)):
 
 ```bash
 research-team run "Enterprise Architecture and Agentic AI adoption" \
