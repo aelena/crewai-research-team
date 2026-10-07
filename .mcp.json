@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "research-team": {
+      "command": ".venv/Scripts/research-team",
+      "args": ["mcp"],
+      "env": {
+        "RESEARCH_VERBOSE": "false"
+      }
+    }
+  }
+}

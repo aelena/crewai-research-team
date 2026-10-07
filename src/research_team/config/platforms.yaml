@@ -14,7 +14,7 @@ linkedin-article:
 
 linkedin-post:
   label: LinkedIn feed post
-  words: [180, 320]
+  words: [200, 450]
   min_sources: 1
   format: >
     A LinkedIn feed post. Plain text, no headings, short paragraphs separated by blank lines. The first

@@ -24,7 +24,8 @@ def test_prompt_carries_hard_rules_and_examples(home):
     assert "Never use em dashes" in text
     assert "No contractions" in text
     assert "delve" in text
-    assert "STYLE EXAMPLES" in text  # references/flowtrack-li-post.md is read in
+    if (home / "references" / "flowtrack-li-post.md").is_file():  # gitignored: absent on a fresh clone
+        assert "STYLE EXAMPLES" in text
 
 
 def test_clean_text_passes(home):
