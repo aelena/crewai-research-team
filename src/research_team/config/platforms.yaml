@@ -1,0 +1,41 @@
+# Where a piece will be published decides its length, structure and citation style.
+# words: [min, max] for the body (front matter, quotes and the sources section are not counted).
+
+linkedin-article:
+  label: LinkedIn article
+  words: [1200, 2000]
+  min_sources: 6
+  format: >
+    A LinkedIn article (the long-form editor, not a feed post). Markdown with a title (H1), a one-line
+    subtitle in italics, and 4 to 7 H2 sections with plain, specific headings. The first two sentences
+    must work on their own as the feed preview. Cite inline with markdown links on the claim itself,
+    and close with a "## Sources" section listing every source as a markdown link with publisher and year.
+    No hashtags in the body; suggest 3 to 5 at the very end under "Hashtags:".
+
+linkedin-post:
+  label: LinkedIn feed post
+  words: [180, 320]
+  min_sources: 1
+  format: >
+    A LinkedIn feed post. Plain text, no headings, short paragraphs separated by blank lines. The first
+    210 characters are the hook (the text before "see more"), so they must stand alone. At most two links,
+    placed at the end, and a "## Sources" section after the post listing them. 3 hashtags on the last line.
+
+blog-essay:
+  label: Long-form essay (personal site)
+  words: [1800, 3200]
+  min_sources: 8
+  format: >
+    A long-form essay for a personal site. Markdown: title (H1), standfirst paragraph in italics,
+    5 to 8 H2 sections, optional H3s. Inline markdown links on claims plus a "## Sources" section with
+    every source (markdown link, publisher, year, one-line note on what it supports). One pull-quote
+    as a blockquote is allowed. May include charts from the research dossier by their image paths.
+
+substack:
+  label: Substack newsletter issue
+  words: [1200, 2200]
+  min_sources: 6
+  format: >
+    A newsletter issue. Markdown: title (H1), subtitle in italics, H2 sections, conversational but
+    precise. Inline links on claims, "## Sources" at the end. Also give "Subject:" and "Preview:" lines
+    at the very top, before the title.

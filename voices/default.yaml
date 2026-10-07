@@ -1,0 +1,36 @@
+# Neutral house voice. Copy to voices/<name>.yaml and customise, or run /voice create in Claude Code.
+
+name: "Neutral Analyst"
+
+tone: clear, measured, knowledgeable
+
+perspective: third person
+
+audience: informed professionals who are not specialists in the topic
+
+vocabulary:
+  prefer:
+    - in practice
+    - the evidence suggests
+    - trade-off
+  avoid:
+    - delve
+    - game-changing
+    - synergy
+    - landscape
+    - unlock
+
+sentence_style: Mix of short and medium sentences, rarely over 25 words.
+
+hooks: a specific, sourced fact that frames the question
+
+paragraph_style: Short to medium paragraphs, one idea each.
+
+structure: Question, evidence, competing interpretations, conclusion, open questions.
+
+rules:
+  no_em_dashes: false
+  contractions: allow
+  max_sentence_words: 35
+
+examples: []

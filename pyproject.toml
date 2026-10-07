@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "research-team"
+version = "0.1.0"
+description = "A CrewAI research team that plans, researches in parallel, fact-checks, and writes publishable pieces in a declared voice. CLI + MCP server."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "aelena", email = "antonioelena@gmail.com" }]
+keywords = ["crewai", "agents", "research", "fact-checking", "mcp", "writing"]
+dependencies = [
+  "crewai[litellm,anthropic]>=1.15,<2",
+  "crewai-tools>=1.15,<2",
+  "exa-py>=1.14",
+  "mcp>=1.20,<2",
+  "pydantic>=2.7",
+  "pydantic-settings>=2.3",
+  "pyyaml>=6.0",
+  "typer>=0.12",
+  "rich>=13.7",
+  "matplotlib>=3.8",
+  "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "ruff>=0.6"]
+
+[project.scripts]
+research-team = "research_team.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/research_team"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = [
+  "ignore::DeprecationWarning:crewai.*",
+  "ignore::pydantic.warnings.PydanticDeprecatedSince20",
+  "ignore:Field 'lifespan' has an incomplete definition",
+  "ignore:function callbacks cannot be serialized",
+]

@@ -1,0 +1,214 @@
+# Twelve tasks in four movements. Async flags, structured outputs and guardrails are set in crew.py.
+#
+#   plan ─┬─ research_main ────────┐                ┌─ verify_main ──────┐
+#         ├─ research_secondary ───┼─ audit_sources ┤                    ├─ synthesize ─ write_report
+#         └─ research_counter ─────┘   (barrier)    └─ verify_secondary ─┘        │
+#                                                                                 draft ─ review ─ revise
+#
+# The audit is a synchronous barrier on purpose: CrewAI will not let an async task read another
+# async task's output unless a synchronous task sits between them.
+
+plan_research:
+  description: >
+    Today is {today}. Plan the research for this piece.
+
+    Topic: {topic}
+    Angle requested by the author (may be empty): {angle}
+    Audience: {audience}
+    Author's notes (may be empty): {notes}
+
+    1. State a working thesis that the evidence could prove wrong, and the strongest counter-thesis.
+    2. Define 3 to 5 MAIN topics: the questions the argument stands or falls on.
+    3. Define 2 to 4 SECONDARY topics: context, history, definitions, adjacent industries.
+    4. For every topic give 2 to 4 key questions and 2 to 4 concrete search queries (include years,
+       named organisations, regulators, standards or datasets where relevant).
+    5. List at least 3 counter-evidence targets: failure cases, critiques, risks, contrary data.
+    6. Say what is out of scope so the researchers do not drift.
+    Prefer questions about mechanisms, costs, outcomes and constraints over questions about hype.
+  expected_output: >
+    A research plan with thesis_hypothesis, counter_thesis, main_topics, secondary_topics,
+    counter_evidence_targets, success_criteria and out_of_scope.
+  agent: research_planner
+
+research_main_topics:
+  description: >
+    Today is {today}. Research every MAIN topic in the plan, using the search and scrape tools.
+    For each topic and key question:
+    - Run the planned queries and better ones you discover. Open the most promising sources.
+    - Prefer primary sources: official statistics, regulators, standards bodies, company filings
+      and earnings calls, peer-reviewed or methodologically transparent studies, named case studies.
+    - Record facts with numbers, units, dates and the population they describe.
+    - Capture short verbatim quotes only when they are attributable to a named person or body.
+    - Note the date of every figure and flag anything older than three years.
+    Never invent a source, a number or a quote. If you could not find something, say so.
+  expected_output: >
+    Markdown research notes, one H2 per MAIN topic. Under each: findings as bullet points, each
+    ending with its source as a markdown link [publisher, year](url); a "Gaps" line; a "Source
+    notes" line on credibility. End with a "## All sources" list of every URL you opened.
+  agent: topic_researcher
+  context: [plan_research]
+
+research_secondary_topics:
+  description: >
+    Today is {today}. Research every SECONDARY topic in the plan, using the search and scrape tools.
+    Gather the context the argument needs: definitions, history, market structure, adjacent
+    industries, regulation and standards. Same evidence rules as the main research: specific,
+    dated, sourced, nothing invented.
+  expected_output: >
+    Markdown research notes, one H2 per SECONDARY topic, findings as bullet points each ending with
+    [publisher, year](url), a "Gaps" line per topic, and a final "## All sources" list.
+  agent: topic_researcher
+  context: [plan_research]
+
+research_counter_evidence:
+  description: >
+    Today is {today}. Build the strongest evidence-based case AGAINST the working thesis in the plan,
+    starting from its counter-evidence targets. Look for: failed, paused or downscaled programmes;
+    cost and timeline overruns; incidents, recalls, enforcement actions and lawsuits; regulatory and
+    certification constraints; credible critics and their arguments; survey methodology problems;
+    base rates. Report what you find honestly, including where the thesis holds up.
+  expected_output: >
+    Markdown notes with H2 sections "Failure cases", "Structural constraints", "Credible critics",
+    "Contrary data" and "Where the thesis survives". Bullets end with [publisher, year](url).
+    Finish with "## All sources".
+  agent: contrarian_researcher
+  context: [plan_research]
+
+audit_sources:
+  description: >
+    Audit every source cited in the three research tracks before any claim is verified.
+    Grade each source: primary, reputable-secondary, vendor-or-advocacy, opinion. Flag duplicates
+    (the same statistic laundered through several articles back to one origin), dead or irrelevant
+    links, paywalled sources that were cited without being read, and figures older than three years
+    presented as current. You may open sources to check them.
+  expected_output: >
+    A markdown source register: a table with columns URL, publisher, date, grade, used for, issues.
+    Then "## Laundered statistics" (statistic, apparent origin) and "## Sources to drop" with reasons.
+  agent: fact_checker
+  context: [research_main_topics, research_secondary_topics, research_counter_evidence]
+
+verify_main_claims:
+  description: >
+    Verify the load-bearing claims from the MAIN research, using the source register and the
+    counter-evidence. For each claim: check it against at least one independent source with the
+    tools, check number, unit, date and denominator, and classify it verified, contested (credible
+    sources disagree), unverified (could not confirm) or refuted. Give the URLs behind each verdict.
+    Extract every number that is verified and chart-worthy into chartable data series. List the gaps
+    and anything a human should review before publication. Use track "main".
+  expected_output: >
+    A claim ledger for the main track: claims with status, confidence, sources, source_quality,
+    as_of and note; chartable series; gaps; needs_human_review.
+  agent: fact_checker
+  context: [research_main_topics, research_counter_evidence, audit_sources]
+
+verify_secondary_claims:
+  description: >
+    Verify the claims from the SECONDARY research the same way: independent confirmation, number,
+    unit, date and denominator, a status and the URLs behind it. Extract verified chartable numbers.
+    Use track "secondary".
+  expected_output: >
+    A claim ledger for the secondary track: claims, chartable series, gaps, needs_human_review.
+  agent: fact_checker
+  context: [research_secondary_topics, audit_sources]
+
+synthesize_findings:
+  description: >
+    Today is {today}. Build the argument from the verified evidence only.
+    1. Restate the working thesis and say whether the evidence supports, qualifies or refutes it.
+       Rewrite the thesis if needed: the evidence wins over the plan.
+    2. Write the 5 to 8 findings that carry the argument, ranked by importance, each tied to
+       verified claims and their URLs. Mark contested claims as contested.
+    3. Explain the mechanisms: why the outcomes happen, not only that they happen.
+    4. Lay out the strongest objection and the honest answer to it.
+    5. List what is unknown, and what would change the conclusion.
+    6. Give the implications for {audience}: decisions, questions to ask, warning signs.
+    7. Propose 2 to 3 narrative angles for a published piece, with the risk of each.
+    Unverified and refuted claims may only appear as such, never as support.
+  expected_output: >
+    A markdown synthesis with sections: Thesis verdict, Key findings, Mechanisms, Strongest
+    objection, Unknowns, Implications, Narrative angles. Every finding cites its URLs.
+  agent: research_analyst
+  context: [plan_research, research_counter_evidence, verify_main_claims, verify_secondary_claims]
+
+write_report:
+  description: >
+    Write the research dossier on "{topic}" from the verified ledgers and the synthesis.
+    Use the chart tool for 1 to 4 charts, only from the ledgers' chartable series, and paste the
+    markdown image link it returns where the chart belongs. Every factual sentence carries an inline
+    markdown link to its source. Keep contested claims labelled. Do not use any URL that is not in
+    the ledgers or the synthesis.
+  expected_output: >
+    A complete markdown report: title, "## Executive summary", "## Key findings", "## Analysis"
+    (subsections as needed, with charts), "## Counter-evidence and risks", "## Insights and
+    recommendations", "## Open questions", "## Methodology and source quality" (how sources were
+    graded, what was excluded and why), and "## References" listing every source as a markdown link
+    with publisher and year.
+  agent: report_writer
+  context: [verify_main_claims, verify_secondary_claims, synthesize_findings]
+
+draft_article:
+  description: >
+    Today is {today}. Write the publishable piece on "{topic}" for {audience}.
+
+    PLATFORM
+    {platform_brief}
+
+    {voice_brief}
+
+    Author's requested angle (may be empty): {angle}
+    Author's notes (may be empty): {notes}
+
+    Rules for the substance:
+    - Pick one narrative angle from the synthesis (or the author's angle) and argue one thesis.
+    - Use only facts from the research dossier, with the dossier's source URLs as inline links.
+      A claim without a source is either cut or written explicitly as the author's opinion.
+    - Take the strongest objection seriously and answer it.
+    - Give the reader something to do or decide differently, specific to their role.
+    - Concrete beats general: named organisations, numbers with dates, mechanisms.
+    - No listicle structure, no generic introduction, no summary conclusion that repeats the body.
+    - Never refer to "the research", "the dossier", "our analysis" or the team: the author is
+      writing in their own name.
+    - End with a "## Sources" section listing every URL you linked.
+  expected_output: >
+    The complete piece in markdown, ready to publish, followed by the "## Sources" section.
+  agent: columnist
+  context: [synthesize_findings, write_report]
+
+review_article:
+  description: >
+    Review the draft as the editorial board. Judge it against the research dossier, the platform
+    and the voice below, and spot-check its most important claims with the search tool.
+
+    PLATFORM
+    {platform_brief}
+
+    {voice_brief}
+
+    Senior editor: hook (would a busy {audience} reader stop?), structure, flow, paragraphs that do
+    not earn their place, ending. Subject-matter expert: accuracy, staleness, oversimplification,
+    claims stronger than their sources. Hostile expert reader: the weakest claim, the missing
+    counter-argument, anything that sounds like marketing. Voice: where it drifts from the profile.
+  expected_output: >
+    A markdown review: "## Verdict" (publishable as is / after changes / not yet, one paragraph),
+    "## Scores" (hook, structure, accuracy, depth, voice fit, each out of 10),
+    "## Critical", "## Important", "## Suggestions" (each item quotes the passage and says exactly
+    what to change), and "## Headline options" (3 alternatives).
+  agent: editorial_board
+  context: [write_report, draft_article]
+
+revise_article:
+  description: >
+    Revise the draft using the editorial board's review. Fix every Critical item and every Important
+    item you agree with; for any you reject, the review's reasoning must be wrong, not inconvenient.
+    Keep the voice, the platform rules and the sourcing rules exactly as for the draft:
+
+    PLATFORM
+    {platform_brief}
+
+    {voice_brief}
+
+    Return the full final piece, not a list of changes.
+  expected_output: >
+    The complete revised piece in markdown, ready to publish, ending with the "## Sources" section.
+  agent: columnist
+  context: [write_report, draft_article, review_article]

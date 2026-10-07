@@ -1,0 +1,20 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+.env
+runs/
+knowledge/*
+!knowledge/README.md
+references/*
+!references/README.md
+
+# local tooling and session state
+_memoria/
+graft/
+.claude/settings.local.json

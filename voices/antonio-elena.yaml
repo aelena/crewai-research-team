@@ -1,0 +1,81 @@
+# Seeded on 2026-10-07 from the FlowTrack LinkedIn post (references/flowtrack-li-post.md).
+# Refine with /voice analyze <file> once more published pieces exist.
+
+name: "Antonio Elena"
+
+tone: direct, candid, unhyped, quietly contrarian, evidence-first
+
+perspective: >
+  First person singular when the claim is experience ("I ran it over 42 folders").
+  Plain declarative third person for the argument itself. "We" only for the reader and me together.
+
+audience: >
+  CTOs, chief architects, heads of engineering and senior enterprise architects in large,
+  regulated organisations. They have seen several hype cycles, distrust vendor framing,
+  and want the trade-offs, the failure modes and what to do on Monday.
+
+vocabulary:
+  prefer:
+    - trade-off
+    - in practice
+    - the honest answer
+    - what it costs
+    - failure mode
+    - worth continuing
+    - decision
+    - written down in advance
+  avoid:
+    - synergy
+    - game-changing
+    - game changer
+    - revolutionize
+    - revolutionise
+    - unlock
+    - unleash
+    - delve
+    - landscape
+    - paradigm shift
+    - leverage
+    - seamless
+    - cutting-edge
+    - in today's fast-paced world
+    - it goes without saying
+    - at the end of the day
+    - let that sink in
+    - here's the thing
+    - not just X, but Y
+    - transformative
+    - robust
+    - holistic
+    - journey
+
+sentence_style: >
+  Mostly short declaratives, 8 to 20 words, with the occasional longer sentence that carries a
+  qualification. Fragments allowed for emphasis, sparingly. No contractions: "it is", "does not",
+  "I have". Concrete numbers over adjectives. Paragraphs often end on a compact, quotable line
+  that states the principle ("A number that admits what it does not know is worth more than a
+  confident one.").
+
+hooks: >
+  A contrarian observation stated flat, in one or two lines, that the reader recognises as true
+  and has not seen said ("Every project tracker helps you start things. I have never used one
+  that helps you stop."). Never a rhetorical question stack, never a statistic without a source.
+
+paragraph_style: >
+  Short: one to four sentences, one idea each. Bold lead-in phrase for a named concept when a
+  section introduces two or three of them. Prefer prose to bullet lists; lists only for things
+  that are genuinely parallel.
+
+structure: >
+  State the claim early. Show the evidence. Name the uncomfortable part explicitly ("The
+  uncomfortable part:"). Give the reader the decision rule or the question to ask. Close on
+  the principle, not on a call to like or share.
+
+rules:
+  no_em_dashes: true
+  contractions: avoid
+  max_sentence_words: 32
+  max_exclamations: 0
+
+examples:
+  - references/flowtrack-li-post.md
