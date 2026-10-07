@@ -129,6 +129,24 @@ a minimum number of distinct sources.
 ```bash
 python -m venv .venv && .venv/Scripts/pip install -e ".[dev]"   # bin/ on macOS/Linux
 ```
+
+Activate the virtual environment, so the `research-team` command is on your path (once per terminal):
+
+```powershell
+.venv\Scripts\Activate.ps1          # Windows PowerShell
+```
+```bat
+.venv\Scripts\activate.bat          :: Windows cmd
+```
+```bash
+source .venv/Scripts/activate       # Git Bash on Windows
+source .venv/bin/activate           # macOS / Linux
+```
+
+If PowerShell refuses to run `Activate.ps1` ("running scripts is disabled on this system"), allow local
+scripts for your user once with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. Without activating
+you can always call the command by its path: `.venv\Scripts\research-team doctor`.
+
 ```bash
 cp .env.example .env  # add an LLM key and a search key of your own in .env
 ```
