@@ -143,6 +143,21 @@ def mcp(
     serve(transport=transport, host=host, port=port)  # type: ignore[arg-type]
 
 
+@app.command()
+def a2a(
+    host: str = "127.0.0.1",
+    port: int = 8766,
+    public_url: Annotated[str, typer.Option(help="URL advertised in the agent card (default http://host:port/)")] = "",
+) -> None:
+    """Serve the crew as an A2A agent. Card at /.well-known/agent-card.json, JSON-RPC at /.
+
+    Set RESEARCH_A2A_TOKEN to require a bearer token on everything except the card.
+    """
+    from .a2a_server import serve
+
+    serve(host=host, port=port, public_url=public_url or None)
+
+
 @voice_app.command("list")
 def voice_list() -> None:
     from .voice import active_voice, list_voices

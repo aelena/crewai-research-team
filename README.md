@@ -1,13 +1,13 @@
 # About
 
 <!-- badges-start -->
-[![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat&logo=python&logoColor=white)](pyproject.toml) [![CrewAI](https://img.shields.io/badge/CrewAI-%3E%3D1.15-ff5a50?style=flat)](https://docs.crewai.com) [![MCP](https://img.shields.io/badge/MCP-server-6f42c1?style=flat)](#mcp-server) [![A2A](https://img.shields.io/badge/A2A-planned-lightgrey?style=flat)](docs/a2a.md) [![Tests](https://img.shields.io/badge/tests-pytest-0a9edc?style=flat&logo=pytest&logoColor=white)](tests) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat)](https://github.com/astral-sh/ruff) [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat&logo=python&logoColor=white)](pyproject.toml) [![CrewAI](https://img.shields.io/badge/CrewAI-%3E%3D1.15-ff5a50?style=flat)](https://docs.crewai.com) [![MCP](https://img.shields.io/badge/MCP-server-6f42c1?style=flat)](#mcp-server) [![A2A](https://img.shields.io/badge/A2A-0.3%20agent-0b7285?style=flat)](#a2a-server) [![Tests](https://img.shields.io/badge/tests-pytest-0a9edc?style=flat&logo=pytest&logoColor=white)](tests) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat)](https://github.com/astral-sh/ruff) [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat)](LICENSE)
 <!-- badges-end -->
 
 This repo is a fully operational CrewAI research team that plans, performs parallel research, verifies every load-bearing claim against
 sources a tool actually returned, and writes a publishable piece in the style of a defined voice and style, in this case mine, but you could clone and replace that to make it your own. 
 
-It runs from a CLI and is exposed as an MCP server, with an A2A adapter designed and next in line.
+It runs from a CLI and is exposed both as an MCP server (tools for a model to call) and as an A2A agent (a peer other agents can delegate a research assignment to).
 
 It started as a deep-research lab or demo crew (planner, researcher, fact checker, report writer, with main and secondary topics researched in parallel). This version keeps that skeleton and adds what a serious piece worthy of actual publication needs before it carries your name: 
 
@@ -196,15 +196,128 @@ CrewAI prints to stdout, which would corrupt a stdio JSON-RPC stream. The server
 messages to the real stdout and sends everything else to stderr; `tests/test_mcp_stdio.py` spawns
 the server with verbose logging on and runs a job through it to prove it.
 
-## A2A
+## A2A server
 
-Designed, not built: [docs/a2a.md](docs/a2a.md) maps runs onto A2A tasks and drafts the agent card.
-`jobs.JobManager` is the transport-neutral service both adapters sit on.
+```bash
+research-team a2a                     # http://127.0.0.1:8766, card at /.well-known/agent-card.json
+research-team a2a --host 0.0.0.0 --port 8766 --public-url https://research.example.org/
+```
+
+### MCP and A2A are not the same thing
+
+Both expose the same crew, but they answer different questions.
+
+- **MCP** lets a model *use tools*. Claude (or any MCP client) sees `start_research`, `research_status`,
+  `get_artifact` as functions it can call, and it stays in charge: it decides when to poll and what to do
+  with the result. The research team is an instrument in someone else's hands.
+- **A2A** (Agent2Agent) lets an agent *delegate work to another agent*. The client does not see tools or
+  internals; it sends a message to a peer, gets a **task** back, and follows that task until the peer
+  hands over **artifacts**. The research team is a colleague you give an assignment to.
+
+That makes A2A the better fit for this crew: a 20-minute piece of work with progress, an outcome and
+deliverables is exactly what an A2A task models.
+
+### How a run looks over A2A
+
+```mermaid
+sequenceDiagram
+    participant C as Client agent
+    participant S as research-team (A2A)
+    participant J as JobManager + crew
+    C->>S: GET /.well-known/agent-card.json
+    S-->>C: card: 3 skills, streaming, auth scheme
+    C->>S: message/stream {topic, platform, skill}
+    S->>J: start run
+    S-->>C: task: submitted, then working ("Run ... started, 12 tasks")
+    loop each crew task completed
+        J-->>S: status.json updated
+        S-->>C: working ("verify_main_claims done (6/12)")
+    end
+    S-->>C: artifact: article (markdown)
+    S-->>C: artifact: report, review, ledgers, sources, lint
+    S-->>C: completed ("Run ... done: '<title>'")
+```
+
+1. **Discovery.** The client reads the **agent card**: name, description, the skills on offer, which
+   input and output formats it accepts, whether it streams, and how to authenticate.
+2. **Skills** map onto the stages: `research-plan` (stage `plan`), `research-report` (`report`),
+   `voiced-article` (`article`). A skill is picked by id; `stage` in the request overrides it.
+3. **The request** is an A2A message. A `DataPart` carries the same fields as the CLI (`topic`, `angle`,
+   `audience`, `notes`, `platform`, `voice`, `stage`, `dry_run`, `skill`); plain text works too and is
+   taken as the topic. Bad input (unknown voice or platform) ends the task as `rejected` with the reason.
+4. **The task** moves `submitted -> working -> completed` (or `failed`). Every crew task that finishes
+   becomes a `working` status update with the run id, completed and pending tasks in its metadata.
+5. **Artifacts** arrive at the end: `article`, `report` and `review` as markdown text, the claim ledgers,
+   `sources` and `lint` as JSON data. What you get depends on the stage.
+
+There are three ways to follow a task, all supported:
+
+- **Stream** (`message/stream`): one connection, server-sent events as they happen. Best for an agent
+  that waits.
+- **Send and poll** (`message/send` with `blocking: false`, then `tasks/get`): the call returns at once
+  with the task id. Best for a run that outlives the caller's patience.
+- **Blocking send** (`message/send`): returns when the task is done. Fine for `research-plan`, a poor
+  idea for a 20-minute article.
+
+### Try it
+
+```bash
+research-team a2a &     # give it a few seconds: importing CrewAI is slow
+curl -s http://127.0.0.1:8766/.well-known/agent-card.json
+
+# start a free dry run, non-blocking: returns the task id straight away
+curl -s http://127.0.0.1:8766/ -H "Content-Type: application/json" -d '{
+  "jsonrpc": "2.0", "id": 1, "method": "message/send",
+  "params": {
+    "configuration": {"blocking": false},
+    "message": {"role": "user", "messageId": "m1", "kind": "message",
+      "parts": [{"kind": "data", "data": {"topic": "Agentic AI in the aviation industry", "dry_run": true}}]}
+  }}'
+
+# follow it
+curl -s http://127.0.0.1:8766/ -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "id": 2, "method": "tasks/get", "params": {"id": "<task id>"}}'
+```
+
+From Python, with the official SDK:
+
+```python
+import httpx
+from uuid import uuid4
+from a2a.client import ClientConfig, ClientFactory
+from a2a.types import DataPart, Message, Part, Role
+
+async with httpx.AsyncClient(timeout=None) as http:
+    client = await ClientFactory.connect("http://127.0.0.1:8766",
+                                         client_config=ClientConfig(httpx_client=http, streaming=True))
+    msg = Message(role=Role.user, message_id=uuid4().hex, parts=[Part(root=DataPart(data={
+        "topic": "Enterprise Architecture and agentic AI adoption", "skill": "voiced-article"}))])
+    async for task, event in client.send_message(msg):
+        ...  # status updates while it works; task.artifacts when it completes
+```
+
+### Operational notes
+
+- **Auth.** Set `RESEARCH_A2A_TOKEN` and every request except the agent card needs
+  `Authorization: Bearer <token>`; the card then declares the bearer scheme so clients know. Without
+  the token the server is open: keep it on `127.0.0.1`.
+- **Tasks survive restarts.** A2A task records are stored in `runs/.a2a-tasks/`, so `tasks/get` still
+  answers for finished tasks after the server restarts. A run that was *in progress* when the server
+  stopped does not resume.
+- **No cancel.** CrewAI cannot stop a kickoff midway, so `tasks/cancel` answers "unsupported" rather
+  than pretending. Push notifications and `input-required` (for example, pausing for you to approve the
+  plan) are not implemented yet.
+- **One engine.** The A2A executor does not run the crew: it starts a job on `JobManager` and follows
+  its `status.json`. CLI, MCP and A2A runs all land in `runs/` and are visible to each other.
+- **Version.** Built on `a2a-sdk` 0.3 (A2A protocol 0.3), the line CrewAI's own `crewai[a2a]` extra
+  pins; the SDK's 1.x line would make the two impossible to install together.
+
+Design rationale and the mapping table: [docs/a2a.md](docs/a2a.md).
 
 ## Development
 
 ```bash
-.venv/Scripts/python -m pytest -q     # 33 tests, no keys, no network
+.venv/Scripts/python -m pytest -q     # no keys, no network: includes real stdio MCP and A2A client round trips
 .venv/Scripts/ruff check src tests
 ```
 

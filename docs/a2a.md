@@ -1,6 +1,7 @@
 # A2A exposure: design note
 
-Status: not built. This note fixes the mapping so the adapter is a thin layer when it is.
+Status: built (2026-10-07) in `src/research_team/a2a_server.py`, served by `research-team a2a`.
+This note keeps the reasoning; the README has the usage. Deviations from the original draft are marked.
 
 ## Why it is cheap
 
@@ -13,10 +14,11 @@ so the A2A server can be a separate process from the MCP server and still see ev
 | Task | one run (`run_id`) |
 | `message/send` | `JobManager.start(ResearchRequest)`; request fields from a `DataPart`, or the topic from a `TextPart` |
 | Task state `submitted / working / completed / failed` | `status.json` `queued / running / done / failed` |
+| `rejected` | invalid request (unknown voice, platform or skill, missing topic), with the reason |
 | `input-required` | not used in v1; candidate: pause after `plan` for the author to approve the plan |
-| Status update events (streaming) | task callbacks already fire per completed task; publish them as `TaskStatusUpdateEvent` |
+| Status update events (streaming) | one `working` update per completed crew task. Built by polling `status.json` rather than from callbacks, so the A2A server needs no hook into the crew and can follow runs it did not start |
 | Artifacts | `runner.ARTIFACTS`: `article` and `report` as markdown parts, ledgers and `sources` as JSON data parts |
-| `tasks/cancel` | not supported by CrewAI mid-kickoff; return `TaskNotCancelableError` |
+| `tasks/cancel` | not supported by CrewAI mid-kickoff; answers `UnsupportedOperationError` |
 
 ## Agent card (draft)
 
@@ -27,7 +29,7 @@ Served at `/.well-known/agent-card.json`. Skills mirror the three stages.
   "name": "research-team",
   "description": "Plans, researches in parallel, verifies claims against recorded sources and writes a publishable piece in a declared voice.",
   "version": "0.1.0",
-  "url": "http://localhost:8766/",
+  "url": "http://127.0.0.1:8766/",
   "capabilities": { "streaming": true, "pushNotifications": false },
   "defaultInputModes": ["text/plain", "application/json"],
   "defaultOutputModes": ["text/markdown", "application/json"],
@@ -45,11 +47,19 @@ Served at `/.well-known/agent-card.json`. Skills mirror the three stages.
 }
 ```
 
-## Build plan
+## What was built
 
-1. `a2a-sdk` (1.x) server: an `AgentExecutor` whose `execute()` calls `JobManager.start`, then
-   tails `status.json` (or a queue fed by the task callbacks) into status events.
-2. `research-team a2a --port 8766` CLI command next to `research-team mcp`.
-3. Contract test with the SDK client: send, stream to completion, fetch the article artifact, in
-   dry-run mode (`"dry_run": true` in the data part) so it runs in CI for free.
-4. Auth: none locally; bearer token from env when bound beyond localhost.
+1. `ResearchExecutor` (an `a2a-sdk` `AgentExecutor`): parses the message, rejects bad input, starts a job on
+   `JobManager`, turns each completed crew task into a status update, then emits artifacts and completes.
+2. `FileTaskStore`: task records in `runs/.a2a-tasks/`, so `tasks/get` survives restarts.
+3. `research-team a2a --host --port --public-url`, uvicorn underneath.
+4. Contract tests with the SDK client in dry-run mode (`tests/test_a2a.py`): card, streamed article run,
+   text input plus skill selection, non-blocking send then poll (and read back after a "restart"),
+   rejection, bearer auth.
+5. Auth: optional bearer token (`RESEARCH_A2A_TOKEN`); the card is always public.
+
+Deviation: `a2a-sdk` 0.3.x, not 1.x. CrewAI's `crewai[a2a]` extra pins `a2a-sdk~=0.3.10`, and this
+project should stay installable next to it. Revisit when CrewAI moves.
+
+Not built: `tasks/cancel` (CrewAI cannot interrupt a kickoff), push notifications, `input-required`
+plan approval, the authenticated extended card.

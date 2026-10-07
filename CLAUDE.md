@@ -1,6 +1,6 @@
 # research-team
 
-CrewAI research crew (12 tasks, 8 agents) + voice profiles + MCP server. See README for the pipeline.
+CrewAI research crew (12 tasks, 8 agents) + voice profiles + MCP server + A2A agent. See README for the pipeline.
 
 ## Conventions
 - Commits as `aelena <antonioelena@gmail.com>` (set in local git config). No em dashes in prose.
@@ -12,7 +12,7 @@ CrewAI research crew (12 tasks, 8 agents) + voice profiles + MCP server. See REA
 - Untracked on purpose: `runs/`, `references/*`, `knowledge/*`, `_memoria/`, `.env`.
 
 ## Checks
-- `.venv/Scripts/python -m pytest -q` (no keys, no network; includes a real stdio MCP round trip)
+- `.venv/Scripts/python -m pytest -q` (no keys, no network; includes a real stdio MCP round trip and SDK-client A2A contract tests)
 - `.venv/Scripts/research-team run "<topic>" --dry-run` walks the whole crew offline.
 
 ## Gotchas (CrewAI 1.15)
@@ -20,3 +20,5 @@ CrewAI research crew (12 tasks, 8 agents) + voice profiles + MCP server. See REA
 - Async task reading an async task's output needs a sync task between them (`audit_sources`).
 - Guardrails must be plain functions: use `Guard(...).as_function()`.
 - Never print to stdout in code reachable from the MCP stdio server.
+- Files polled by MCP/A2A while the crew writes them: use `runner.atomic_write_text` / `runner.read_text` (Windows locks).
+- A2A uses a2a-sdk 0.3.x on purpose (crewai[a2a] pins ~=0.3.10); do not bump to 1.x.
