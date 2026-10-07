@@ -15,6 +15,8 @@ from typing import Any, Literal
 
 from crewai import LLM, Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
+from crewai.tasks.output_format import OutputFormat
+from crewai.tasks.task_output import TaskOutput
 
 from .guardrails import Guard, article_checks, known_citations, ledger_integrity, report_checks
 from .models import ClaimLedger, ResearchPlan
@@ -75,6 +77,9 @@ class RunContext:
     registry: SourceRegistry = field(default_factory=SourceRegistry)
     on_task_done: Callable[[str, Any], None] | None = None
     overrides: list[dict[str, Any]] = field(default_factory=list)  # guardrails waved through on the last attempt
+    # Reused work: task name -> (raw text, structured output or None), loaded from an earlier run.
+    # These tasks are not executed; their saved output is handed to the tasks that read them.
+    prefilled: dict[str, tuple[str, Any]] = field(default_factory=dict)
 
     def record_override(self, guard: str, problems: list[str]) -> None:
         self.overrides.append({"guard": guard, "problems": problems})
@@ -125,12 +130,13 @@ class ResearchCrew:
         CrewAI 1.15 refuses to run one agent instance on two async tasks at once ("Executor is
         already running"), so the secondary track gets its own instance of the same definition.
         """
-        return self._agent(key, self._research_tools(), max_iter=25, track=track)
+        return self._agent(key, self._research_tools(), max_iter=self.ctx.settings.agent_max_iter, track=track)
 
     def _research_tools(self, scrape: bool = True) -> list:
         if self.ctx.settings.dry_run:
             return []
-        return research_tools(self.ctx.settings.resolved_search(), self.ctx.registry, scrape=scrape)
+        s = self.ctx.settings
+        return research_tools(s.resolved_search(), self.ctx.registry, scrape=scrape, max_chars=s.tool_max_chars)
 
     def _guard(self, name: str, checks: list) -> Callable[[Any], tuple[bool, Any]]:
         s = self.ctx.settings
@@ -154,15 +160,15 @@ class ResearchCrew:
 
     @agent
     def topic_researcher(self) -> Agent:
-        return self._agent("topic_researcher", self._research_tools(), max_iter=25)
+        return self._agent("topic_researcher", self._research_tools(), max_iter=self.ctx.settings.agent_max_iter)
 
     @agent
     def contrarian_researcher(self) -> Agent:
-        return self._agent("contrarian_researcher", self._research_tools(), max_iter=25)
+        return self._agent("contrarian_researcher", self._research_tools(), max_iter=self.ctx.settings.agent_max_iter)
 
     @agent
     def fact_checker(self) -> Agent:
-        return self._agent("fact_checker", self._research_tools(), max_iter=25)
+        return self._agent("fact_checker", self._research_tools(), max_iter=self.ctx.settings.agent_max_iter)
 
     @agent
     def research_analyst(self) -> Agent:
@@ -248,7 +254,10 @@ class ResearchCrew:
     @crew
     def crew(self) -> Crew:
         s = self.ctx.settings
-        wanted = set(stage_tasks(self.ctx.stage))
+        wanted = set(stage_tasks(self.ctx.stage)) - set(self.ctx.prefilled)
+        for t in self.tasks:
+            if t.name in self.ctx.prefilled:
+                t.output = _saved_output(t, *self.ctx.prefilled[t.name])
         tasks = [t for t in self.tasks if t.name in wanted]
         agents = list({id(t.agent): t.agent for t in tasks if t.agent}.values())
         kwargs: dict[str, Any] = {}
@@ -263,6 +272,15 @@ class ResearchCrew:
             tracing=False,
             **kwargs,
         )
+
+
+def _saved_output(task: Task, raw: str, structured: Any) -> TaskOutput:
+    """A reused task's output, in the shape CrewAI reads when it builds the next tasks' context."""
+    return TaskOutput(
+        description=task.description, name=task.name, expected_output=task.expected_output, raw=raw,
+        pydantic=structured, agent=task.agent.role if task.agent else "reused",
+        output_format=OutputFormat.PYDANTIC if structured is not None else OutputFormat.RAW,
+    )
 
 
 def _knowledge_sources(folder: Path) -> list:

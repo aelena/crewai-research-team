@@ -36,13 +36,16 @@ def run(
     voice: Annotated[str, typer.Option(help="Voice profile name (default: voices/.active)")] = "",
     stage: Annotated[str, typer.Option(help="plan | report | article")] = "article",
     dry_run: Annotated[bool, typer.Option(help="Scripted offline LLM, no keys, no cost: checks the pipeline")] = False,
+    reuse: Annotated[str, typer.Option(help="none | plan | research | report: reuse an earlier run's work (default: RESEARCH_REUSE)")] = "",
+    reuse_from: Annotated[str, typer.Option(help="'latest' or a run id (default: RESEARCH_REUSE_FROM)")] = "",
 ) -> None:
     """Run the crew in the foreground. Everything lands in runs/<run_id>/."""
     from .runner import ResearchRequest, RunState, execute, new_run_id
 
     s = get_settings()
     req = ResearchRequest(topic=topic, angle=angle, audience=audience or None, notes=notes, platform=platform,
-                          voice=voice or None, stage=stage, dry_run=dry_run)  # type: ignore[arg-type]
+                          voice=voice or None, stage=stage, dry_run=dry_run,  # type: ignore[arg-type]
+                          reuse=reuse or None, reuse_from=reuse_from or None)  # type: ignore[arg-type]
     run_id = new_run_id(topic)
     run_dir = s.path(s.runs_dir) / run_id
     run_dir.mkdir(parents=True)
@@ -50,7 +53,16 @@ def run(
     state.update(run_id=run_id, status="queued")
     console.print(f"[bold]run[/] {run_id}  stage={stage}  dry_run={dry_run}  platform={platform}  search={'none' if dry_run else s.resolved_search()}")
     result = execute(req, s, run_dir, state)
+    if result.get("reused_from"):
+        console.print(f"reused {result['reuse']} from {result['reused_from']} "
+                      f"({len(result['reused_tasks'])} tasks skipped)")
     console.print(f"\n[bold]{result['status']}[/] in {result.get('elapsed_s', '?')}s -> {run_dir}")
+    usage = result.get("usage") or {}
+    if total := usage.get("total"):
+        cost = usage.get("estimated_cost_usd")
+        console.print(f"tokens: {total['prompt_tokens']:,} in / {total['completion_tokens']:,} out, "
+                      f"{total['successful_requests']} requests"
+                      + (f", about ${cost:.2f} at list price" if cost is not None else ""))
     if result.get("error"):
         console.print(f"[red]{escape(result['error'])}[/]")
         raise typer.Exit(1)
@@ -64,7 +76,7 @@ def run(
 def plan(topic: str, angle: str = "", notes: str = "", dry_run: bool = False) -> None:
     """Only the research plan: a cheap check of scope and thesis before a full run."""
     run(topic=topic, angle=angle, audience="", notes=notes, platform="linkedin-article", voice="", stage="plan",
-        dry_run=dry_run)
+        dry_run=dry_run, reuse="none", reuse_from="")
 
 
 @app.command()
@@ -126,6 +138,8 @@ def doctor() -> None:
     keys = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", *SEARCH_KEYS.values()]
     console.print("keys: " + "  ".join(f"{k}={'set' if os.getenv(k) else '-'}" for k in keys))
     console.print(f"search: {s.resolved_search()}   home: {s.home}   memory: {s.memory}   knowledge: {s.knowledge}")
+    console.print(f"cost: tool_max_chars={s.tool_max_chars or 'no cap'}   agent_max_iter={s.agent_max_iter}   "
+                  f"reuse={s.reuse}   reuse_from={s.reuse_from}")
     if s.resolved_search() == "none":
         console.print("[yellow]No search provider: agents will work from model knowledge only and citations "
                       "cannot be checked against tool results.[/]")

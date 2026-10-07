@@ -43,6 +43,15 @@ class Settings(BaseSettings):
     strict_guardrails: bool = False
     dry_run: bool = Field(False, description="Scripted offline LLM and no web tools: exercises the pipeline for free")
 
+    # Cost controls. Tool-using agents resend their whole conversation, scraped pages included, on
+    # every step, so input tokens grow with (result size x steps). These two caps bound that product.
+    tool_max_chars: int = Field(12_000, description="Max characters of one search/scrape result the agent sees; 0 = no cap")
+    agent_max_iter: int = Field(12, description="Max reasoning/tool steps for researchers and fact checkers")
+
+    # Reuse an earlier run's work instead of paying for it again.
+    reuse: Literal["none", "plan", "research", "report"] = "none"
+    reuse_from: str = Field("latest", description="'latest' (newest earlier run of the same topic) or a run id")
+
     def path(self, p: Path) -> Path:
         return p if p.is_absolute() else self.home / p
 

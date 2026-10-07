@@ -1,0 +1,8 @@
+# USD per 1M tokens, list prices, used only to *estimate* a run's cost in status.json.
+# Keys are the model strings as configured (RESEARCH_LLM_*). Models not listed get no estimate.
+# Update when prices change; your invoice is the source of truth (discounts, cache writes and
+# reasoning-token accounting are not modelled). Anthropic list prices as of October 2026.
+
+anthropic/claude-opus-5-5:   {input: 4.00, output: 20.00, cached_input: 0.20}
+anthropic/claude-sonnet-5-5: {input: 2.00, output: 10.00, cached_input: 0.20}
+anthropic/claude-haiku-4-5:  {input: 1.00, output: 5.00}

@@ -175,7 +175,7 @@ produces something like the below depending on the values on your `.env` (API Ke
 keys: ANTHROPIC_API_KEY=set  OPENAI_API_KEY=set  GEMINI_API_KEY=-  EXA_API_KEY=-  SERPER_API_KEY=-  TAVILY_API_KEY=-
 BRAVE_API_KEY=set
 search: brave   home: <DIR>   memory: False   knowledge: False
-
+  
 
 ```
 
@@ -217,9 +217,102 @@ A run writes `runs/<run_id>/`: `01-plan_research.json` ... `12-revise_article.md
 
 Each agent is `fast` (tool-heavy: researchers, fact checkers) or `strong` (planner, analyst, writers, board). Defaults: `RESEARCH_LLM_FAST=anthropic/claude-sonnet-5-5`, `RESEARCH_LLM_STRONG=anthropic/claude-opus-5-5`. Any CrewAI/LiteLLM model string works, and any single agent can be overridden: `RESEARCH_LLM_COLUMNIST=...`.
 
+Anthropic list prices per million tokens, input / output (October 2026):
+
+| Model | Input | Output | Good for here |
+|---|---|---|---|
+| `claude-opus-5-5` | $4 | $20 | the prose: columnist, and the editorial board if you can afford it |
+| `claude-sonnet-5-5` | $2 | $10 | judgement: planner, analyst, report writer, fact checker |
+| `claude-haiku-4-5` | $1 | $5 | volume: field researchers and the contrarian researcher |
+
+The defaults favour quality. For several runs a week, a cheaper mix that keeps the strongest model
+on the only text a reader sees:
+
+```bash
+RESEARCH_LLM_FAST=anthropic/claude-haiku-4-5        # researchers, contrarian, fact checkers
+RESEARCH_LLM_STRONG=anthropic/claude-sonnet-5-5     # planner, analyst, report writer, editorial board
+RESEARCH_LLM_COLUMNIST=anthropic/claude-opus-5-5    # optional: Opus only for the draft and the revision
+```
+
+On list prices alone that roughly halves the cost per token for every agent. Two things to watch:
+
+- **Fact checking is a judgement task.** If the ledgers on Haiku look careless (claims marked verified
+  on weak sources), move just that agent back up: `RESEARCH_LLM_FACT_CHECKER=anthropic/claude-sonnet-5-5`.
+- **Haiku 4.5 has a 200K context window** (the others have 1M). Long research loops full of scraped
+  pages can approach it; the caps below help.
+
+Model choice is not the biggest lever, though. See [Keeping the cost down](#keeping-the-cost-down).
+
 ### Search
 
 `RESEARCH_SEARCH_PROVIDER=auto` picks the first of Exa, Serper, Tavily, Brave with a key present in your .env file. With none, the crew runs from model knowledge, citations cannot be checked, and the article is marked as `sourced: false`, so that while functional, the output will not be the best possible and you would be missing a lot of what this Crew can provide, so my recommendation is to not publish from that.
+
+### Keeping the cost down
+
+**Where the tokens go.** Most of a run is *input* to the five tool-using agents (two field researchers,
+the contrarian, two fact checkers), not output from the writers. Every time an agent calls a tool,
+CrewAI resends the whole conversation so far, every page it has scraped included. Cost therefore grows
+with *result size x number of steps*. Every completed run records what it actually spent in
+`runs/<run_id>/status.json` under `usage`: measure before and after any change.
+
+**1. Work in stages.** Do not ask for the article until the research is right.
+
+```bash
+research-team run "<topic>" --stage plan      # one LLM call: is the thesis and scope right?
+research-team run "<topic>" --stage report --reuse plan     # research on that plan; read report.md and the ledgers
+research-team run "<topic>" --stage article --reuse report  # only draft, review, revise: no research repeated
+```
+
+Read `report.md`, `06-verify_main_claims.json` and `07-verify_secondary_claims.json` before going on. The
+draft, review and revision only add cost on top of research you have already accepted, and with
+`--reuse report` you can write the same research up for another platform (`--platform blog-essay`) or
+another angle without paying for the research again.
+
+**2. Reuse earlier work** (`RESEARCH_REUSE`, `RESEARCH_REUSE_FROM`, or `--reuse` / `--reuse-from`).
+
+| `RESEARCH_REUSE` | Skips | The new run does |
+|---|---|---|
+| `none` (default) | nothing | everything |
+| `plan` | task 1 | research, verification, synthesis, report (and the article if `--stage article`) |
+| `research` | tasks 1 to 4 | source audit onwards: the way back from a run that stopped after the research tracks (credit, rate limit) |
+| `report` | tasks 1 to 9 | draft, review, revise only (needs `--stage article`) |
+
+`RESEARCH_REUSE_FROM=latest` (the default) takes the newest earlier run of the **same topic** that has
+every file the reuse needs; set it to a run id (`research-team runs` lists them) to reuse a specific run,
+whatever its topic. The reused files are copied into the new run so it stays complete on its own, and
+the original run's recorded sources come along, so the citation guardrails still accept only URLs a
+tool actually returned during that research. A failed run is reusable too, up to wherever it got: a
+run that died during verification still has its plan and three research tracks, so
+
+```bash
+research-team run "<same topic>" --stage article --reuse research
+```
+
+resumes at the source audit instead of paying for the research twice.
+
+**3. Cap what the agents read and how long they loop.**
+
+| Setting | Default | What it does |
+|---|---|---|
+| `RESEARCH_TOOL_MAX_CHARS` | `12000` | Each search or scrape result is cut to this many characters before the agent sees it (a note says so). URLs past the cut are not recorded as sources, because the agent never read them. `0` = no cap. |
+| `RESEARCH_AGENT_MAX_ITER` | `12` | Maximum reasoning/tool steps for each researcher and fact checker. Lower is cheaper and shallower; raise it for topics where the evidence is hard to find. |
+
+Lowering either one trades thoroughness for cost. The defaults are a starting point, not a measured
+optimum: tune them against the `usage` and the quality of the ledgers you get.
+
+**4. Know what a run cost.** Every run, failed ones included, records tokens per model and a list-price
+estimate in `status.json` under `usage`, and the CLI prints a one-line summary at the end, shaped like
+this (illustrative numbers, not a measurement):
+
+```text
+tokens: 1,840,210 in / 96,402 out, 214 requests, about $4.98 at list price
+```
+
+Prices come from `src/research_team/config/prices.yaml`; edit it when prices change or to add a model
+(models without a price get no estimate). It is an estimate: cache writes, discounts and how reasoning
+tokens are billed are not modelled, so your invoice is the source of truth. Usage is counted once per
+model, not per agent: CrewAI's own crew total adds a shared model's counters once for every agent
+using it, which overstates spend several times over in this crew.
 
 ---
 

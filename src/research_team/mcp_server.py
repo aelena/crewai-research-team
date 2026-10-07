@@ -46,6 +46,8 @@ def build_server(settings: Settings | None = None, jobs: JobManager | None = Non
         voice: str = "",
         stage: Literal["plan", "report", "article"] = "article",
         dry_run: bool = False,
+        reuse: Literal["", "none", "plan", "research", "report"] = "",
+        reuse_from: str = "",
     ) -> str:
         """Start a research run in the background and return its run_id.
 
@@ -53,9 +55,12 @@ def build_server(settings: Settings | None = None, jobs: JobManager | None = Non
         "article" (dossier plus a voice-checked piece that went through draft, review and revision).
         platform: see list_platforms. voice: see list_voices (empty = active profile).
         dry_run: scripted offline LLM, finishes in seconds, costs nothing (for testing a client).
+        reuse: "plan" skips planning; "research" also skips the three research tracks; "report" skips all research and only writes (needs stage "article"),
+        using an earlier run's saved work. reuse_from: "latest" (same topic) or a run_id. Empty = server default.
         """
         req = ResearchRequest(topic=topic, angle=angle, audience=audience or None, notes=notes,
-                              platform=platform, voice=voice or None, stage=stage, dry_run=dry_run)
+                              platform=platform, voice=voice or None, stage=stage, dry_run=dry_run,
+                              reuse=reuse or None, reuse_from=reuse_from or None)
         get_platform(req.platform)
         load_voice(req.voice, voices_dir)  # fail now, not ten minutes in
         return dumps(jobs.start(req))

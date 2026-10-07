@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from .platforms import get_platform
 from .settings import Settings
+from .usage import report as usage_report
 from .voice import lint, load_voice, word_count
 
 Stage = Literal["plan", "report", "article"]
@@ -54,6 +55,9 @@ class ResearchRequest(BaseModel):
     voice: str | None = Field(None, description="Voice profile name; default is voices/.active")
     stage: Stage = "article"
     dry_run: bool = Field(False, description="Scripted offline LLM: checks the pipeline, costs nothing")
+    reuse: Literal["none", "plan", "research", "report"] | None = Field(
+        None, description="Reuse an earlier run's plan, research tracks, or whole report. Default: RESEARCH_REUSE")
+    reuse_from: str | None = Field(None, description="'latest' or a run id. Default: RESEARCH_REUSE_FROM")
 
 
 def slugify(text: str, limit: int = 50) -> str:
@@ -159,7 +163,8 @@ def execute(request: ResearchRequest, settings: Settings, run_dir: Path, state: 
     voice = load_voice(request.voice, settings.path(settings.voices_dir))
     platform = get_platform(request.platform)
     audience = request.audience or voice.audience.strip()
-    tasks = list(stage_tasks(request.stage))
+    reuse = request.reuse or settings.reuse
+    reuse_from = request.reuse_from or settings.reuse_from
 
     def on_done(name: str, output: Any) -> None:
         save_task_output(run_dir, name, output)
@@ -169,6 +174,21 @@ def execute(request: ResearchRequest, settings: Settings, run_dir: Path, state: 
 
     ctx = RunContext(settings=settings, voice=voice, platform=platform, run_dir=run_dir,
                      stage=request.stage, on_task_done=on_done)
+    reused: dict[str, Any] = {}
+    if reuse != "none":
+        from . import reuse as reuse_mod
+
+        try:
+            if request.stage not in reuse_mod.ALLOWED[reuse]:
+                raise ValueError(f"reuse '{reuse}' needs stage {' or '.join(reuse_mod.ALLOWED[reuse])}, "
+                                 f"not '{request.stage}'")
+            src = reuse_mod.find_source(settings.path(settings.runs_dir), request.topic, reuse, reuse_from, run_dir)
+            ctx.prefilled = reuse_mod.load(src, reuse, run_dir, ctx.registry)
+        except ValueError as exc:
+            return state.update(status="failed", error=f"reuse: {exc}", finished=_now(), stage=request.stage,
+                                request=request.model_dump())
+        reused = {"reuse": reuse, "reused_from": src.name, "reused_tasks": list(ctx.prefilled)}
+    tasks = [t for t in stage_tasks(request.stage) if t not in ctx.prefilled]
     inputs = {
         "topic": request.topic,
         "angle": request.angle or "(none: choose the strongest angle the evidence supports)",
@@ -181,14 +201,18 @@ def execute(request: ResearchRequest, settings: Settings, run_dir: Path, state: 
     models = {k: settings.llm_for(k, tier) for k, tier in AGENT_TIERS.items()}
     state.update(status="running", started=_now(), pid=os.getpid(), stage=request.stage,
                  request=request.model_dump(), dry_run=settings.dry_run, voice=voice.slug, platform=platform.name,
-                 search=settings.resolved_search(), models=models, completed_tasks=[], pending_tasks=tasks)
+                 search=settings.resolved_search(), models=models, completed_tasks=[], pending_tasks=tasks,
+                 tool_max_chars=settings.tool_max_chars, agent_max_iter=settings.agent_max_iter, **reused)
     t0 = time.monotonic()
+    crew_base = ResearchCrew(ctx)
     try:
-        result = ResearchCrew(ctx).crew().kickoff(inputs=inputs)
+        result = crew_base.crew().kickoff(inputs=inputs)
     except Exception as exc:
+        # A failed run has still spent money: record what, so a credit or rate-limit stop is measurable.
         _write_json(run_dir / "sources.json", [s.model_dump() for s in ctx.registry.sources()])
         return state.update(status="failed", error=f"{type(exc).__name__}: {exc}", finished=_now(),
-                            elapsed_s=round(time.monotonic() - t0), guardrail_overrides=ctx.overrides)
+                            elapsed_s=round(time.monotonic() - t0), guardrail_overrides=ctx.overrides,
+                            usage=usage_report(crew_base._llms))
 
     sources = [s.model_dump() for s in ctx.registry.sources()]
     _write_json(run_dir / "sources.json", sources)
@@ -207,10 +231,9 @@ def execute(request: ResearchRequest, settings: Settings, run_dir: Path, state: 
         (run_dir / "article.md").write_text(_front_matter(meta) + body.strip() + "\n", encoding="utf-8")
         summary.update(title=meta["title"], words=meta["words"], lint=violations, article_status=meta["status"])
 
-    usage = getattr(result, "token_usage", None)
     return state.update(
         status="done", finished=_now(), elapsed_s=round(time.monotonic() - t0),
-        usage=usage.model_dump() if usage is not None else None,
+        usage=usage_report(crew_base._llms),
         guardrail_overrides=ctx.overrides, summary=summary,
         artifacts=sorted(k for k, f in ARTIFACTS.items() if (run_dir / f).is_file()),
     )

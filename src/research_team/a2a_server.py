@@ -49,6 +49,7 @@ from . import __version__
 from .crew import stage_tasks
 from .jobs import JobManager
 from .platforms import get_platform
+from .reuse import reused_tasks
 from .runner import ARTIFACTS, ResearchRequest, atomic_write_text, read_text
 from .settings import Settings, get_settings
 from .voice import load_voice
@@ -120,7 +121,7 @@ def parse_request(context: RequestContext) -> ResearchRequest:
     """Build a ``ResearchRequest`` from an A2A message.
 
     A ``DataPart`` carries the fields as JSON (topic, angle, audience, notes, platform, voice, stage,
-    dry_run, skill). Plain text is accepted as the topic, so a bare "Agentic AI in aviation" works.
+    dry_run, skill, reuse, reuse_from). Plain text is accepted as the topic, so a bare "Agentic AI in aviation" works.
     The skill id (in the data or the message metadata) selects the stage unless ``stage`` is given.
     """
     data: dict[str, Any] = {}
@@ -168,7 +169,8 @@ class ResearchExecutor(AgentExecutor):
 
         started = self.jobs.start(request)
         run_id = started["run_id"]
-        total = len(stage_tasks(request.stage))
+        reuse = request.reuse or self.jobs.settings.reuse
+        total = len(stage_tasks(request.stage)) - len(reused_tasks(reuse))
         await updater.start_work(say(f"Run {run_id} started: stage '{request.stage}', {total} tasks.",
                                      run_id=run_id, stage=request.stage))
 

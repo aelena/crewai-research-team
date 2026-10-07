@@ -12,17 +12,23 @@ from ..sources import SourceRegistry, extract_urls
 
 
 class RecordingTool(BaseTool):
-    """Delegates to ``inner`` and records the URLs in its arguments and result."""
+    """Delegates to ``inner``, caps the result size, and records the URLs in its arguments and result."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
     inner: BaseTool
     registry: Any  # SourceRegistry; Any keeps pydantic from trying to validate it
+    max_chars: int = 0  # 0 = no cap
 
     def _run(self, *args: Any, **kwargs: Any) -> Any:
         # The slim schema fills omitted optionals with None; the inner tool should see only real arguments.
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         result = self.inner.run(*args, **kwargs)
         text = str(result)
+        if self.max_chars and len(text) > self.max_chars:
+            # Every later step of the agent resends this text, so a whole scraped page costs many times over.
+            text = f"{text[: self.max_chars]}\n\n[truncated: first {self.max_chars} of {len(text)} characters]"
+            result = text
+        # Record only what the agent actually saw: a URL cut off by the cap was never read.
         self.registry.observe(text, origin=self.inner.name)
         # A URL the agent passed in (scrape) only counts if fetching it produced something.
         if text.strip() and not text.lower().startswith(("error", "failed")):
@@ -69,12 +75,12 @@ def union_params(schema: type[BaseModel]) -> list[str]:
     return [k for k, v in props.items() if "anyOf" in v or isinstance(v.get("type"), list)]
 
 
-def recorded(tool: BaseTool, registry: SourceRegistry) -> RecordingTool:
+def recorded(tool: BaseTool, registry: SourceRegistry, max_chars: int = 0) -> RecordingTool:
     schema = tool.args_schema
     if schema is not None and union_params(schema):
         schema = slim_args_schema(schema, KEEP_OPTIONAL.get(type(tool).__name__))
     return RecordingTool(name=tool.name, description=tool.description, args_schema=schema, inner=tool,
-                         registry=registry)
+                         registry=registry, max_chars=max_chars)
 
 
 def _search_tool(provider: str) -> BaseTool | None:
@@ -96,14 +102,15 @@ def _search_tool(provider: str) -> BaseTool | None:
     raise ValueError(f"unknown search provider '{provider}'")
 
 
-def research_tools(provider: str, registry: SourceRegistry, *, scrape: bool = True) -> list[BaseTool]:
+def research_tools(provider: str, registry: SourceRegistry, *, scrape: bool = True,
+                   max_chars: int = 0) -> list[BaseTool]:
     """Search (if a provider is configured) and scrape, both recording into ``registry``."""
     from crewai_tools import ScrapeWebsiteTool
 
     tools = [t for t in (_search_tool(provider),) if t is not None]
     if scrape:
         tools.append(ScrapeWebsiteTool())
-    return [recorded(t, registry) for t in tools]
+    return [recorded(t, registry, max_chars) for t in tools]
 
 
 __all__ = ["RecordingTool", "extract_urls", "recorded", "research_tools"]

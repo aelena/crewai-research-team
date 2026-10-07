@@ -22,3 +22,5 @@ CrewAI research crew (12 tasks, 8 agents) + voice profiles + MCP server + A2A ag
 - Never print to stdout in code reachable from the MCP stdio server.
 - Files polled by MCP/A2A while the crew writes them: use `runner.atomic_write_text` / `runner.read_text` (Windows locks).
 - A2A uses a2a-sdk 0.3.x on purpose (crewai[a2a] pins ~=0.3.10); do not bump to 1.x.
+- Never use `Crew.calculate_usage_metrics` / `CrewOutput.token_usage`: LLM instances are shared per model, so CrewAI's per-agent sum overcounts. Use `usage.report(crew._llms)`.
+- Anthropic rejects >16 union-typed tool params per request: research tools go through `slim_args_schema`.
